@@ -348,9 +348,8 @@ func VerifyAll(
 		}
 	}
 
-	results := make([]VerifyResult, len(entries))
 	if len(entries) == 0 {
-		return results, nil
+		return []VerifyResult{}, nil
 	}
 
 	workerLimit := cfg.concurrency
@@ -372,6 +371,7 @@ func VerifyAll(
 	}
 	close(jobs)
 
+	resultsChan := make(chan VerifyResult, len(entries))
 	var wg sync.WaitGroup
 	for w := 0; w < workerLimit; w++ {
 		wg.Add(1)
@@ -381,14 +381,14 @@ func VerifyAll(
 				res := VerifyResult{Index: j.index}
 				local := j.entry
 				if local.Credentials.Type == xdr.SorobanCredentialsTypeSorobanCredentialsSourceAccount {
-					results[j.index] = res
+					resultsChan <- res
 					continue
 				}
 
 				credentials, err := addressCredentials(local.Credentials)
 				if err != nil {
 					res.Error = err
-					results[j.index] = res
+					resultsChan <- res
 					continue
 				}
 				addrStr, err := FormatAddress(credentials.Address)
@@ -396,13 +396,19 @@ func VerifyAll(
 					res.Address = addrStr
 				}
 
-				_, err = VerifyEntry(ctx, local, networkPassphrase)
+				_, err = VerifyEntryContext(ctx, local, networkPassphrase)
 				res.Error = err
-				results[j.index] = res
+				resultsChan <- res
 			}
 		}()
 	}
 
 	wg.Wait()
+	close(resultsChan)
+
+	results := make([]VerifyResult, len(entries))
+	for res := range resultsChan {
+		results[res.Index] = res
+	}
 	return results, nil
 }
