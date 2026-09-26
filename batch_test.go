@@ -679,7 +679,7 @@ func TestVerifyAllAndVerifyEntry(t *testing.T) {
 		},
 	}
 
-	entry, err := AuthorizeAll(context.Background(), []xdr.SorobanAuthorizationEntry{{
+	signedSlice, err := AuthorizeAll(context.Background(), []xdr.SorobanAuthorizationEntry{{
 		Credentials: xdr.SorobanCredentials{
 			Type: xdr.SorobanCredentialsTypeSorobanCredentialsAddress,
 			Address: &xdr.SorobanAddressCredentials{
@@ -691,46 +691,15 @@ func TestVerifyAllAndVerifyEntry(t *testing.T) {
 	}}, []Signer{signer}, 100, network.TestNetworkPassphrase)
 	require.NoError(t, err)
 
-	report, err := VerifyEntry(entry, network.TestNetworkPassphrase)
+	report, err := VerifyEntry(signedSlice[0], network.TestNetworkPassphrase)
 	require.NoError(t, err)
 	assert.True(t, report.Verified())
 
-	results, err := VerifyAll(context.Background(), []xdr.SorobanAuthorizationEntry{entry}, network.TestNetworkPassphrase, WithConcurrency(2))
+	results, err := VerifyAll(context.Background(), signedSlice, network.TestNetworkPassphrase, WithConcurrency(2))
 	require.NoError(t, err)
 	require.Len(t, results, 1)
 	assert.NoError(t, results[0].Error)
-	reportFromResults, err := VerifyEntry(entry, network.TestNetworkPassphrase)
+	reportFromResults, err := VerifyEntry(signedSlice[0], network.TestNetworkPassphrase)
 	require.NoError(t, err)
 	assert.True(t, reportFromResults.Verified())
-}
-
-func BenchmarkVerifyEntry(b *testing.B) {
-	kp, err := keypair.Random()
-	if err != nil {
-		b.Fatalf("random keypair: %v", err)
-	}
-	signer := NewEd25519Signer(kp)
-	entry := entryForArm(nil, xdr.SorobanCredentialsTypeSorobanCredentialsAddress, 1)
-	address, err := ParseAddress(kp.Address())
-	if err != nil {
-		b.Fatalf("parse address: %v", err)
-	}
-	creds, err := addressCredentials(entry.Credentials)
-	if err != nil {
-		b.Fatalf("address credentials: %v", err)
-	}
-	creds.Address = address
-
-	signed, err := AuthorizeAll(context.Background(), []xdr.SorobanAuthorizationEntry{entry}, []Signer{signer}, 100, network.TestNetworkPassphrase)
-	if err != nil {
-		b.Fatalf("authorize: %v", err)
-	}
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_, err := VerifyEntry(signed[0], network.TestNetworkPassphrase)
-		if err != nil {
-			b.Fatalf("verify: %v", err)
-		}
-	}
 }
