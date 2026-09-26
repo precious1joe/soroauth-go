@@ -59,12 +59,7 @@ func ExitCode(err error) int {
 	return ExitGeneralError
 }
 
-// newError wraps an error with the given exit code.
-func newError(exitCode int, format string, args ...any) error {
-	return &cliError{err: fmt.Errorf(format, args...), exitCode: exitCode}
-}
-
-// newErrorf wraps an error with the given exit code (alias for newError).
+// newErrorf wraps an error with the given exit code.
 func newErrorf(exitCode int, format string, args ...any) error {
 	return &cliError{err: fmt.Errorf(format, args...), exitCode: exitCode}
 }
@@ -133,11 +128,11 @@ func runWithStdin(args []string, stdout, stderr io.Writer, getenv func(string) s
 
 	switch args[0] {
 	case "payload":
-		return runPayloadWithStdin(args[1:], stdout, stderr, stdin)
+		return runPayloadWithStdin(args[1:], stdout, stderr, getenv, stdin)
 	case "sign":
 		return runSignWithStdin(args[1:], stdout, stderr, getenv, stdin)
 	case "delegates":
-		return runDelegatesWithStdin(args[1:], stdout, stderr, stdin)
+		return runDelegatesWithStdin(args[1:], stdout, stderr, getenv, stdin)
 	case "inspect":
 		return runInspect(args[1:], stdout, stderr)
 	case "verify":
@@ -323,7 +318,11 @@ func runTUI(args []string, stdout, stderr io.Writer, getenv func(string) string)
 			}
 		case "--valid-until":
 			if i+1 < len(args) {
-				fmt.Sscanf(args[i+1], "%d", &validUntilLedger)
+				// A malformed value leaves validUntilLedger at zero, which the
+				// required-flag check below refuses. The TUI parses its own
+				// flags rather than using the flag package, so there is no
+				// parse error to surface here.
+				_, _ = fmt.Sscanf(args[i+1], "%d", &validUntilLedger)
 				i++
 			}
 		case "--network":

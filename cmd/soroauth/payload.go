@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -17,11 +18,16 @@ import (
 const payloadUsage = `soroauth payload — print the signing preimage and payload hash for an entry.
 
 usage:
-  soroauth payload --entry <base64|-> --valid-until <ledger> --network <name|passphrase> [--json]
+  soroauth payload --entry <base64|-> (--valid-until <ledger> | --valid-for <ledgers>) \
+                   --network <name|passphrase> [--rpc-url <url>] [--json]
 
-Subcommands support reading entries from stdin using --entry - so commands compose in pipelines.
+Give exactly one of --valid-until (an absolute ledger) or --valid-for (a
+lifetime in ledgers, added to the current ledger). --valid-for needs an RPC
+endpoint, taken from --rpc-url or, if that is unset, $SOROAUTH_RPC_URL; it is
+refused when neither names one, because guessing a network here would resolve
+an expiration against the wrong chain.
 
-Subcommands support reading entries from stdin using --entry - so commands compose in pipelines:
+An --entry of - reads the entry from stdin, so commands compose in pipelines:
 
   soroauth delegates --entry entry.b64 --valid-until 1234567 --delegate GABC... | \
     soroauth sign --entry - --valid-until 1234567 --network testnet --secret-env SEED --for GABC...
@@ -60,11 +66,14 @@ type envelopePayloadOutput struct {
 	Payload        string `json:"payload,omitempty"`
 }
 
-func runPayload(args []string, stdout, stderr io.Writer) error {
-	return runPayloadWithStdin(args, stdout, stderr, os.Stdin)
+func runPayload(args []string, stdout, stderr io.Writer, getenv func(string) string) error {
+	return runPayloadWithStdin(args, stdout, stderr, getenv, os.Stdin)
 }
 
-func runPayloadWithStdin(args []string, stdout, stderr io.Writer, stdin io.Reader) error {
+// runPayloadWithStdin is runPayload with the reader `--entry -` draws from
+// injected, so a pipeline can be driven from a test. getenv is here because
+// --valid-for falls back to $SOROAUTH_RPC_URL.
+func runPayloadWithStdin(args []string, stdout, stderr io.Writer, getenv func(string) string, stdin io.Reader) error {
 	flags := flag.NewFlagSet("payload", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	flags.Usage = func() {
@@ -75,6 +84,8 @@ func runPayloadWithStdin(args []string, stdout, stderr io.Writer, stdin io.Reade
 
 	entryFlag := flags.String("entry", "", "the authorization entry or transaction envelope, as base64 XDR or -")
 	validUntil := flags.Uint("valid-until", 0, "the last ledger at which the signature is valid")
+	validFor := flags.Uint64("valid-for", 0, "the signature lifetime in ledgers, resolved against the current ledger (needs --rpc-url)")
+	rpcURL := flags.String("rpc-url", "", "RPC endpoint used to resolve --valid-for (default $SOROAUTH_RPC_URL)")
 	networkFlag := flags.String("network", "", "testnet, public, or a literal network passphrase")
 	jsonFlag := flags.Bool("json", false, "output as JSON")
 
@@ -95,15 +106,16 @@ func runPayloadWithStdin(args []string, stdout, stderr io.Writer, stdin io.Reade
 	if err != nil {
 		return writeJSONError(stdout, *jsonFlag, err)
 	}
-	if *validUntil == 0 {
-		return writeJSONError(stdout, *jsonFlag, newErrorf(ExitUsageError, "--valid-until is required and must be greater than zero"))
+	expiration, err := resolveValidUntil(context.Background(), uint64(*validUntil), *validFor, resolveRPCURL(*rpcURL, getenv), fetchLatestLedger)
+	if err != nil {
+		return writeJSONError(stdout, *jsonFlag, err)
 	}
 
 	if input.IsEnvelope {
-		return runPayloadEnvelope(stdout, input.Envelope, uint32(*validUntil), passphrase, *jsonFlag)
+		return runPayloadEnvelope(stdout, input.Envelope, expiration, passphrase, *jsonFlag)
 	}
 
-	preimage, err := soroauth.Preimage(input.Entry, uint32(*validUntil), passphrase)
+	preimage, err := soroauth.Preimage(input.Entry, expiration, passphrase)
 	if err != nil {
 		// Classify the error for exit code
 		var exitCode int
