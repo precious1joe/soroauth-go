@@ -209,6 +209,7 @@ func TestAuthorizeAllFillsDelegateTrees(t *testing.T) {
 // ambiguity resolved in AuthorizeAll's doc comment: one matching signer
 // anywhere in the tree is enough, because requiring the account's own
 // signature would break the delegates-only pattern CAP-71-01 allows.
+
 func TestAuthorizeAllAcceptsDelegatesWithoutATopLevelSigner(t *testing.T) {
 	base := entryForArm(t, xdr.SorobanCredentialsTypeSorobanCredentialsAddressV2, 42)
 	delegate := testKeypair(t, "soroauth-delegate-1")
