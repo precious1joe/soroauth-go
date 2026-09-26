@@ -734,5 +734,11 @@ func TestVerifyAllWithOptionsAndErrors(t *testing.T) {
 
 	assert.NoError(t, results[0].Error)
 
-	assert.Error(t, results[1].Error)
+	// The second entry is unsigned, and VerifyAll deliberately does not treat
+	// that as an error: the loop above only sets Error for a verdict that is
+	// neither VerdictVerified nor VerdictUnsigned. That matches the engine's
+	// own semantics — CAP-71-01 permits a Void top-level signature when only
+	// delegates authenticate, so "unsigned" is a verdict, not a failure.
+	assert.NoError(t, results[1].Error)
+	assert.Equal(t, 1, results[1].Index)
 }
