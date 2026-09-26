@@ -688,23 +688,10 @@ func TestVerifyAllAndVerifyEntry(t *testing.T) {
 	parsedAddr := mustParse(t, kp.Address())
 	signer := NewEd25519Signer(testKeypair(t, "soroauth-verify-batch"))
 
-	var contractID xdr.ContractId
-	contractID[0] = 9
-
-	inv := xdr.SorobanAuthorizedInvocation{
-		Function: xdr.SorobanAuthorizedFunction{
-			Type: xdr.SorobanAuthorizedFunctionTypeSorobanAuthorizedFunctionTypeContractFn,
-			ContractFn: &xdr.InvokeContractArgs{
-				ContractAddress: xdr.ScAddress{
-					Type:       xdr.ScAddressTypeScAddressTypeContract,
-					ContractId: &contractID,
-				},
-				FunctionName: xdr.ScSymbol("hello"),
-			},
-		},
-	}
-
 	base := entryForArm(t, xdr.SorobanCredentialsTypeSorobanCredentialsAddress, 1)
+	cred, err := addressCredentials(base.Credentials)
+	require.NoError(t, err)
+	cred.Address = parsedAddr
 	cred, err := addressCredentials(base.Credentials)
 	require.NoError(t, err)
 	cred.Address = parsedAddr
