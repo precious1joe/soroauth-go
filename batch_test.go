@@ -1,17 +1,19 @@
 package soroauth
 
 import (
-	"bytes"
 	"context"
+	"testing"
+
+	"bytes"
 	"crypto/sha256"
 	"errors"
 	"fmt"
-	"strings"
-	"testing"
-
 	"github.com/stellar/go-stellar-sdk/keypair"
 	"github.com/stellar/go-stellar-sdk/network"
 	"github.com/stellar/go-stellar-sdk/xdr"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"strings"
 )
 
 // entryForSigner builds an address entry owned by the given test label.
@@ -207,6 +209,52 @@ func TestAuthorizeAllFillsDelegateTrees(t *testing.T) {
 // ambiguity resolved in AuthorizeAll's doc comment: one matching signer
 // anywhere in the tree is enough, because requiring the account's own
 // signature would break the delegates-only pattern CAP-71-01 allows.
+
+func TestVerifyAllAndConcurrency(t *testing.T) {
+	first := "soroauth-verify-batch-1"
+	second := "soroauth-verify-batch-2"
+
+	entries := []xdr.SorobanAuthorizationEntry{
+		entryForArm(t, xdr.SorobanCredentialsTypeSorobanCredentialsSourceAccount, 1),
+		entryForSigner(t, first, xdr.SorobanCredentialsTypeSorobanCredentialsAddress, 2),
+		entryForSigner(t, second, xdr.SorobanCredentialsTypeSorobanCredentialsAddressV2, 3),
+	}
+
+	signed, err := AuthorizeAll(context.Background(), entries, []Signer{
+		NewEd25519Signer(testKeypair(t, first)),
+		NewEd25519Signer(testKeypair(t, second)),
+	}, testValidUntilLedger, network.TestNetworkPassphrase)
+	require.NoError(t, err)
+
+	results, err := VerifyAll(context.Background(), signed, network.TestNetworkPassphrase, WithConcurrency(2))
+	require.NoError(t, err)
+	require.Len(t, results, 3)
+	for _, res := range results {
+		assert.NoError(t, res.Error)
+	}
+}
+
+func TestVerifyAllWithOptionsAndEntries(t *testing.T) {
+	first := "soroauth-batch-verify-1"
+	kp := testKeypair(t, first)
+	signer := NewEd25519Signer(kp)
+	base := entryForArm(t, xdr.SorobanCredentialsTypeSorobanCredentialsAddressV2, 10)
+
+	address, err := ParseAddress(kp.Address())
+	require.NoError(t, err)
+	cred, err := addressCredentials(base.Credentials)
+	require.NoError(t, err)
+	cred.Address = address
+
+	signedSlice, err := AuthorizeAll(context.Background(), []xdr.SorobanAuthorizationEntry{base}, []Signer{signer}, testValidUntilLedger, network.TestNetworkPassphrase)
+	require.NoError(t, err)
+
+	results, err := VerifyAll(context.Background(), signedSlice, network.TestNetworkPassphrase, WithConcurrency(4))
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+	assert.NoError(t, results[0].Error)
+}
+
 func TestAuthorizeAllAcceptsDelegatesWithoutATopLevelSigner(t *testing.T) {
 	base := entryForArm(t, xdr.SorobanCredentialsTypeSorobanCredentialsAddressV2, 42)
 	delegate := testKeypair(t, "soroauth-delegate-1")
@@ -657,4 +705,73 @@ func ExampleRequireAllSigned() {
 	fmt.Println("rejected:", errors.Is(err, ErrUnsignedCredentialNode))
 	// Output:
 	// rejected: true
+}
+
+func TestVerifyAllAndVerifyEntry(t *testing.T) {
+	kp := testKeypair(t, "soroauth-verify-batch")
+	parsedAddr := mustParse(t, kp.Address())
+	signer := NewEd25519Signer(testKeypair(t, "soroauth-verify-batch"))
+
+	var contractID xdr.ContractId
+	contractID[0] = 9
+
+	inv := xdr.SorobanAuthorizedInvocation{
+		Function: xdr.SorobanAuthorizedFunction{
+			Type: xdr.SorobanAuthorizedFunctionTypeSorobanAuthorizedFunctionTypeContractFn,
+			ContractFn: &xdr.InvokeContractArgs{
+				ContractAddress: xdr.ScAddress{
+					Type:       xdr.ScAddressTypeScAddressTypeContract,
+					ContractId: &contractID,
+				},
+				FunctionName: xdr.ScSymbol("hello"),
+			},
+		},
+	}
+
+	base := entryForArm(t, xdr.SorobanCredentialsTypeSorobanCredentialsAddress, 1)
+	cred, err := addressCredentials(base.Credentials)
+	require.NoError(t, err)
+	cred.Address = parsedAddr
+
+	signedSlice, err := AuthorizeAll(context.Background(), []xdr.SorobanAuthorizationEntry{base}, []Signer{signer}, 100, network.TestNetworkPassphrase)
+	require.NoError(t, err)
+
+	report, err := VerifyEntry(signedSlice[0], network.TestNetworkPassphrase)
+	require.NoError(t, err)
+	assert.True(t, report.Verified())
+
+	results, err := VerifyAll(context.Background(), signedSlice, network.TestNetworkPassphrase, WithConcurrency(2))
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+	assert.NoError(t, results[0].Error)
+	reportFromResults, err := VerifyEntry(signedSlice[0], network.TestNetworkPassphrase)
+	require.NoError(t, err)
+	assert.True(t, reportFromResults.Verified())
+}
+
+func TestVerifyAllWithOptionsAndErrors(t *testing.T) {
+	kp := testKeypair(t, "soroauth-verify-batch")
+	signer := NewEd25519Signer(kp)
+
+	entry := entryForArm(t, xdr.SorobanCredentialsTypeSorobanCredentialsAddressV2, 10)
+	address, err := ParseAddress(kp.Address())
+	require.NoError(t, err)
+	cred, err := addressCredentials(entry.Credentials)
+	require.NoError(t, err)
+	cred.Address = address
+
+	signedSlice, err := AuthorizeAll(context.Background(), []xdr.SorobanAuthorizationEntry{entry}, []Signer{signer}, 100, network.TestNetworkPassphrase)
+	require.NoError(t, err)
+
+	unsignedEntry := entryForArm(t, xdr.SorobanCredentialsTypeSorobanCredentialsAddressV2, 11)
+
+	entries := []xdr.SorobanAuthorizationEntry{signedSlice[0], unsignedEntry}
+
+	results, err := VerifyAll(context.Background(), entries, network.TestNetworkPassphrase, WithConcurrency(2))
+	require.NoError(t, err)
+	require.Len(t, results, 2)
+
+	assert.NoError(t, results[0].Error)
+
+	assert.Error(t, results[1].Error)
 }
