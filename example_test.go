@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/stellar/go-stellar-sdk/network"
 	"github.com/stellar/go-stellar-sdk/xdr"
 )
 
@@ -94,4 +95,27 @@ func ExampleNewPasskeySigner() {
 	fmt.Printf("signer address: %s\n", signer.Address())
 
 	// Output: signer address: GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF
+}
+
+// ExampleVerifyAll shows how to verify a batch of authorization entries
+// concurrently with custom configuration and per-entry reporting.
+func ExampleVerifyAll() {
+	entry := xdr.SorobanAuthorizationEntry{
+		Credentials: xdr.SorobanCredentials{
+			Type: xdr.SorobanCredentialsTypeSorobanCredentialsSourceAccount,
+		},
+	}
+
+	results, err := VerifyAll(context.Background(), []xdr.SorobanAuthorizationEntry{entry}, network.TestNetworkPassphrase, WithConcurrency(2))
+	if err != nil {
+		fmt.Println("verify error:", err)
+		return
+	}
+
+	for _, res := range results {
+		fmt.Printf("entry %d address=%q err=%v\n", res.Index, res.Address, res.Error)
+		break
+	}
+
+	// Output: entry 0 address="" err=<nil>
 }
