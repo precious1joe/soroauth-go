@@ -703,3 +703,34 @@ func TestVerifyAllAndVerifyEntry(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, reportFromResults.Verified())
 }
+
+func BenchmarkVerifyEntry(b *testing.B) {
+	kp, err := keypair.Random()
+	if err != nil {
+		b.Fatalf("random keypair: %v", err)
+	}
+	signer := NewEd25519Signer(kp)
+	entry := entryForArm(nil, xdr.SorobanCredentialsTypeSorobanCredentialsAddress, 1)
+	address, err := ParseAddress(kp.Address())
+	if err != nil {
+		b.Fatalf("parse address: %v", err)
+	}
+	creds, err := addressCredentials(entry.Credentials)
+	if err != nil {
+		b.Fatalf("address credentials: %v", err)
+	}
+	creds.Address = address
+
+	signed, err := AuthorizeAll(context.Background(), []xdr.SorobanAuthorizationEntry{entry}, []Signer{signer}, 100, network.TestNetworkPassphrase)
+	if err != nil {
+		b.Fatalf("authorize: %v", err)
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, err := VerifyEntry(signed[0], network.TestNetworkPassphrase)
+		if err != nil {
+			b.Fatalf("verify: %v", err)
+		}
+	}
+}
