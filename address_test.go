@@ -13,7 +13,7 @@ import (
 
 // testKeypair derives a deterministic public test keypair from a label. These
 // keys are public by construction and must never be funded on mainnet.
-func testKeypair(t *testing.T, label string) *keypair.Full {
+func testKeypair(t testing.TB, label string) *keypair.Full {
 	t.Helper()
 	kp, err := keypair.FromRawSeed(sha256.Sum256([]byte(label)))
 	if err != nil {
@@ -23,7 +23,7 @@ func testKeypair(t *testing.T, label string) *keypair.Full {
 }
 
 // testContractAddress derives a deterministic C… address from a label.
-func testContractAddress(t *testing.T, label string) string {
+func testContractAddress(t testing.TB, label string) string {
 	t.Helper()
 	sum := sha256.Sum256([]byte(label))
 	address, err := strkey.Encode(strkey.VersionByteContract, sum[:])

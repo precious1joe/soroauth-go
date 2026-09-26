@@ -12,6 +12,7 @@ import (
 
 	"github.com/stellar/go-stellar-sdk/keypair"
 	"github.com/stellar/go-stellar-sdk/network"
+	"github.com/stellar/go-stellar-sdk/strkey"
 	"github.com/stellar/go-stellar-sdk/xdr"
 )
 
@@ -434,7 +435,17 @@ func ExampleAllowResign() {
 		fmt.Println("error:", err)
 		return
 	}
-	contract, err := ParseAddress(testContractAddress(&testing.T{}, "soroauth-example-contract"))
+	// Derived inline rather than through testContractAddress: an example has no
+	// *testing.T, and a &testing.T{} literal is an uninitialised struct whose
+	// Fatalf panics instead of reporting. The example's own error handling
+	// below is what it should use anyway.
+	contractSeed := sha256.Sum256([]byte("soroauth-example-contract"))
+	contractStrkey, err := strkey.Encode(strkey.VersionByteContract, contractSeed[:])
+	if err != nil {
+		fmt.Println("error:", err)
+		return
+	}
+	contract, err := ParseAddress(contractStrkey)
 	if err != nil {
 		fmt.Println("error:", err)
 		return

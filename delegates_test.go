@@ -566,7 +566,7 @@ func TestValidateDelegateOrder(t *testing.T) {
 
 // xdrcopyEntry deep-copies an entry so a test can corrupt the copy without
 // disturbing the fixture it came from.
-func xdrcopyEntry(t *testing.T, entry xdr.SorobanAuthorizationEntry) (xdr.SorobanAuthorizationEntry, error) {
+func xdrcopyEntry(t testing.TB, entry xdr.SorobanAuthorizationEntry) (xdr.SorobanAuthorizationEntry, error) {
 	t.Helper()
 	encoded, err := entry.MarshalBinary()
 	if err != nil {
@@ -607,10 +607,14 @@ func FuzzValidateDelegateOrder(f *testing.F) {
 		f.Add([]byte(v.UnsignedEntryXDR))
 	}
 
-	// Use a dummy or test helper via a standalone func or t
-	entry := entryForArm(&testing.T{}, xdr.SorobanCredentialsTypeSorobanCredentialsAddressV2, 42)
-	d1 := testKeypair(&testing.T{}, "soroauth-delegate-1").Address()
-	d2 := testKeypair(&testing.T{}, "soroauth-delegate-2").Address()
+	// f is passed to the helpers directly. A &testing.T{} literal would be an
+	// uninitialised struct: t.Helper() and t.Fatalf() on one panic rather than
+	// reporting, so a seed that failed to build would take the fuzz target
+	// down instead of failing it. The helpers take testing.TB, which *testing.F
+	// satisfies.
+	entry := entryForArm(f, xdr.SorobanCredentialsTypeSorobanCredentialsAddressV2, 42)
+	d1 := testKeypair(f, "soroauth-delegate-1").Address()
+	d2 := testKeypair(f, "soroauth-delegate-2").Address()
 
 	wellFormed, err := WithDelegates(entry, testValidUntilLedger,
 		[]Delegate{{Address: d1, Nested: []Delegate{{Address: d2}}}, {Address: d2}}, nil)
@@ -623,7 +627,7 @@ func FuzzValidateDelegateOrder(f *testing.F) {
 
 	// Add a malformed/duplicate seed bytes
 	if err == nil {
-		broken, _ := xdrcopyEntry(&testing.T{}, wellFormed)
+		broken, _ := xdrcopyEntry(f, wellFormed)
 		if broken.Credentials.AddressWithDelegates.Delegates != nil && len(broken.Credentials.AddressWithDelegates.Delegates) > 1 {
 			broken.Credentials.AddressWithDelegates.Delegates[1].Address = broken.Credentials.AddressWithDelegates.Delegates[0].Address
 			if bin, err := broken.MarshalBinary(); err == nil {
