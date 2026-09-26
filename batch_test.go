@@ -679,7 +679,16 @@ func TestVerifyAllAndVerifyEntry(t *testing.T) {
 		},
 	}
 
-	entry, err := AuthorizeInvocation(context.Background(), inv, signer, 100, network.TestNetworkPassphrase)
+	entry, err := AuthorizeAll(context.Background(), []xdr.SorobanAuthorizationEntry{{
+		Credentials: xdr.SorobanCredentials{
+			Type: xdr.SorobanCredentialsTypeSorobanCredentialsAddress,
+			Address: &xdr.SorobanAddressCredentials{
+				Address: mustParse(t, testKeypair(t, "soroauth-verify-batch").Address()),
+				Nonce:   1,
+			},
+		},
+		RootInvocation: inv,
+	}}, []Signer{signer}, 100, network.TestNetworkPassphrase)
 	require.NoError(t, err)
 
 	report, err := VerifyEntry(entry, network.TestNetworkPassphrase)
