@@ -403,7 +403,7 @@ func VerifyAll(
 					res.Address = addrStr
 				}
 
-				_, err = VerifyEntryContext(ctx, local, networkPassphrase)
+				_, err = VerifyEntry(local, networkPassphrase)
 				res.Error = err
 				mu.Lock()
 				results[j.index] = res
