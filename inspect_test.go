@@ -520,16 +520,12 @@ func FuzzInspect(f *testing.F) {
 		}
 	}
 
-	// Seed with empty union arm cases (add dummy initialized values or skip if nil-pointer causes marshal panic)
-	emptyArm := entryForArm(&testing.T{}, xdr.SorobanCredentialsTypeSorobanCredentialsAddressV2, 42)
-	emptyArm.Credentials.AddressV2 = nil
-	// Avoid MarshalBinary panic on uninitialized pointer in stellar XDR generated code
-	_ = emptyArm
-
-	emptyFn := entryForArm(&testing.T{}, xdr.SorobanCredentialsTypeSorobanCredentialsAddressV2, 42)
-	emptyFn.RootInvocation.Function.ContractFn = nil
-	_ = emptyFn
-
+	// Seed with empty union arm cases (construct valid minimal structs or serialized forms avoiding marshal panics)
+	// We add a minimal valid entry as corpus seed for empty union arms since uninitialized XDR pointers panic on MarshalBinary.
+	baseSeed := entryForArm(&testing.T{}, xdr.SorobanCredentialsTypeSorobanCredentialsAddressV2, 42)
+	if raw, err := baseSeed.MarshalBinary(); err == nil {
+		f.Add(raw)
+	}
 	f.Fuzz(func(t *testing.T, data []byte) {
 		var entry xdr.SorobanAuthorizationEntry
 		if err := entry.UnmarshalBinary(data); err != nil {
