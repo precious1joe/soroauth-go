@@ -123,6 +123,22 @@ func ExampleVerifyAll() {
 	// Output: entry 0 address="" err=<nil>
 }
 
+// ExampleDescribeSignature shows how to use DescribeSignature to inspect
+// an unknown or custom signature shape.
+func ExampleDescribeSignature() {
+	// A sample passkey signature shape (64 bytes)
+	bytesVal := make([]byte, 64)
+	sig := xdr.ScVal{
+		Type:  xdr.ScValTypeScvBytes,
+		Bytes: (*xdr.ScBytes)(&bytesVal),
+	}
+
+	shape := DescribeSignature(sig)
+	fmt.Printf("shape type: %s, description: %s\n", shape.Type, shape.Description)
+
+	// Output: shape type: passkey, description: 64-byte binary passkey signature
+}
+
 // ExampleSigner_cancellation shows how signers honour context cancellation
 // to abort signing operations when a deadline expires or the caller cancels.
 func ExampleSigner_cancellation() {

@@ -1,15 +1,16 @@
 package soroauth
 
 import (
+	"testing"
+
 	"context"
 	"encoding/json"
 	"errors"
-	"reflect"
-	"strings"
-	"testing"
-
 	"github.com/stellar/go-stellar-sdk/network"
 	"github.com/stellar/go-stellar-sdk/xdr"
+	"github.com/stretchr/testify/assert"
+	"reflect"
+	"strings"
 )
 
 func TestInspectReportsTheArm(t *testing.T) {
@@ -182,6 +183,71 @@ func TestInspectReportsCreateContractWithoutAFunction(t *testing.T) {
 	}
 }
 
+func TestInspectNodeInfoJSONGolden(t *testing.T) {
+	buf := make([]byte, 64)
+	shape := DescribeSignature(xdr.ScVal{
+		Type:  xdr.ScValTypeScvBytes,
+		Bytes: (*xdr.ScBytes)(&buf),
+	})
+	node := NodeInfo{
+		Address: "GBEXAMPLE",
+		Signed:  true,
+		Shape:   &shape,
+	}
+	data, err := json.Marshal(node)
+	if err != nil {
+		fn := t.Fatalf
+		fn("marshaling node info: %v", err)
+	}
+	// Verify JSON serialization includes the Shape field correctly and matches golden schema expectations
+	var m map[string]any
+	if err := json.Unmarshal(data, &m); err != nil {
+		t.Fatalf("unmarshaling node info: %v", err)
+	}
+	if _, ok := m["shape"]; !ok {
+		t.Error("serialized NodeInfo json is missing 'shape' field")
+	}
+	if m["address"] != "GBEXAMPLE" {
+		t.Errorf("expected address GBEXAMPLE, got %v", m["address"])
+	}
+	if m["signed"] != true {
+		t.Errorf("expected signed true, got %v", m["signed"])
+	}
+	// Verify backwards compatibility of omitting Shape when nil
+	nilShapeNode := NodeInfo{
+		Address: "GBEXAMPLE",
+		Signed:  false,
+	}
+	dataNil, err := json.Marshal(nilShapeNode)
+	if err != nil {
+		t.Fatalf("marshaling node info with nil shape: %v", err)
+	}
+	var mNil map[string]any
+	if err := json.Unmarshal(dataNil, &mNil); err != nil {
+		t.Fatalf("unmarshaling node info with nil shape: %v", err)
+	}
+	if _, ok := mNil["shape"]; ok {
+		t.Error("serialized NodeInfo json should omit 'shape' field when nil for backwards compatibility")
+	}
+
+	// Test vector ScValTypeScvVec signature description explicitly
+	vecVal := xdr.ScVal{Type: xdr.ScValTypeScvVec}
+	vecShape := DescribeSignature(vecVal)
+	if vecShape.Type != SignatureShapeUnknown {
+		t.Errorf("vector shape type is %v, want %v", vecShape.Type, SignatureShapeUnknown)
+	}
+	if !strings.Contains(vecShape.Description, "vector structure signature") {
+		t.Errorf("vector shape description is %q, want it to mention vector structure signature", vecShape.Description)
+	}
+
+	// Test nil Bytes pointer safety
+	nilBytesVal := xdr.ScVal{Type: xdr.ScValTypeScvBytes, Bytes: nil}
+	nilBytesShape := DescribeSignature(nilBytesVal)
+	if nilBytesShape.Type != SignatureShapeUnknown {
+		t.Errorf("nil bytes shape type is %v, want %v", nilBytesShape.Type, SignatureShapeUnknown)
+	}
+}
+
 func TestInspectReportsTheDelegateTree(t *testing.T) {
 	base := entryForArm(t, xdr.SorobanCredentialsTypeSorobanCredentialsAddressV2, 42)
 	d1 := testKeypair(t, "soroauth-delegate-1").Address()
@@ -299,6 +365,37 @@ func TestInspectShowsMisorderedDelegates(t *testing.T) {
 	}
 }
 
+func TestDescribeSignatureVectorShape(t *testing.T) {
+	sig := xdr.ScVal{Type: xdr.ScValTypeScvVec}
+	shape := DescribeSignature(sig)
+	if shape.Type != SignatureShapeUnknown {
+		t.Errorf("got type %v, want %v", shape.Type, SignatureShapeUnknown)
+	}
+	if shape.Description != "vector structure signature" {
+		t.Errorf("got description %q, want %q", shape.Description, "vector structure signature")
+	}
+}
+
+func TestNodeInfoShapeSerializationGolden(t *testing.T) {
+	shape := SignatureShape{
+		Type:        SignatureShapePasskey,
+		Description: "64-byte binary passkey signature",
+	}
+	node := NodeInfo{
+		Address: "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF",
+		Signed:  true,
+		Shape:   &shape,
+	}
+	data, err := json.Marshal(node)
+	if err != nil {
+		t.Fatalf("marshaling NodeInfo: %v", err)
+	}
+	expected := `{"address":"GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF","signed":true,"shape":{"type":"passkey","description":"64-byte binary passkey signature"}}`
+	if string(data) != expected {
+		t.Errorf("NodeInfo JSON serialization mismatch:\n got: %s\nwant: %s", string(data), expected)
+	}
+}
+
 func TestInspectSerialisesToJSON(t *testing.T) {
 	base := entryForArm(t, xdr.SorobanCredentialsTypeSorobanCredentialsAddressV2, 42)
 	entry, err := WithDelegates(base, testValidUntilLedger,
@@ -388,4 +485,24 @@ func mustParse(t *testing.T, address string) xdr.ScAddress {
 		t.Fatalf("parsing %q: %v", address, err)
 	}
 	return parsed
+}
+func TestDescribeSignatureShapes(t *testing.T) {
+	// Void signature
+	shapeVoid := DescribeSignature(xdr.ScVal{Type: xdr.ScValTypeScvVoid})
+	assert.Equal(t, SignatureShapeUnknown, shapeVoid.Type)
+
+	// Vec signature
+	vec := &xdr.ScVec{}
+	shapeVec := DescribeSignature(xdr.ScVal{Type: xdr.ScValTypeScvVec, Vec: &vec})
+	assert.Equal(t, SignatureShapeUnknown, shapeVec.Type)
+
+	// Map signature
+	m := &xdr.ScMap{}
+	shapeMap := DescribeSignature(xdr.ScVal{Type: xdr.ScValTypeScvMap, Map: &m})
+	assert.Equal(t, SignatureShapeMap, shapeMap.Type)
+
+	// Bytes signature
+	b := xdr.ScBytes([]byte{1, 2, 3})
+	shapeBytes := DescribeSignature(xdr.ScVal{Type: xdr.ScValTypeScvBytes, Bytes: &b})
+	assert.Equal(t, SignatureShapeUnknown, shapeBytes.Type)
 }

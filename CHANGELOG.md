@@ -1,13 +1,13 @@
 # Changelog
 
-All notable changes to this project are documented here.
+All notable changes to this project are documented here:
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-### Added
+- `DescribeSignature` and `SignatureShape` report structural descriptions of uncheckable custom account signatures best-effort without upgrading them into verification verdicts. (#63)
 
 - `VerifyAll` batch verification API with configurable concurrency (`WithConcurrency`), reporting per-entry verdicts without aborting the entire batch on individual entry failures. (#62)
 

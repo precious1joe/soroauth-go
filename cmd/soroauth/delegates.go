@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"os"
 
 	"github.com/soroauth/soroauth-go"
 )
@@ -13,8 +14,13 @@ import (
 const delegatesUsage = `soroauth delegates — wrap an entry in a delegated-signer credential.
 
 usage:
-  soroauth delegates --entry <base64> --valid-until <ledger> \
+  soroauth delegates --entry <base64|-> --valid-until <ledger> \
                      [--delegate <address> ...] [--nested-json <json>] [--json]
+
+Subcommands support reading entries from stdin using --entry - so commands compose in pipelines:
+
+  soroauth delegates --entry entry.b64 --valid-until 1234567 --delegate GABC... | \
+    soroauth sign --entry - --valid-until 1234567 --network testnet --secret-env SEED --for GABC...
 
 Converts an ADDRESS or ADDRESS_V2 entry into ADDRESS_WITH_DELEGATES (CAP-71-01),
 with the delegates sorted into the order the protocol requires. Pass --delegate
@@ -56,6 +62,10 @@ func (a *addressList) Set(value string) error {
 }
 
 func runDelegates(args []string, stdout, stderr io.Writer) error {
+	return runDelegatesWithStdin(args, stdout, stderr, os.Stdin)
+}
+
+func runDelegatesWithStdin(args []string, stdout, stderr io.Writer, stdin io.Reader) error {
 	flags := flag.NewFlagSet("delegates", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	flags.Usage = func() {
@@ -64,7 +74,7 @@ func runDelegates(args []string, stdout, stderr io.Writer) error {
 		flags.PrintDefaults()
 	}
 
-	entryFlag := flags.String("entry", "", "the authorization entry, as base64 XDR")
+	entryFlag := flags.String("entry", "", "the authorization entry, as base64 XDR or -")
 	validUntil := flags.Uint("valid-until", 0, "the last ledger at which the signatures are valid")
 	var delegates addressList
 	flags.Var(&delegates, "delegate", "a delegate address; repeat for several")
@@ -75,7 +85,12 @@ func runDelegates(args []string, stdout, stderr io.Writer) error {
 		return newErrorf(ExitUsageError, "%w", err)
 	}
 
-	entry, err := decodeEntry(*entryFlag)
+	resolvedEntry, err := resolveEntryArg(*entryFlag, stdin)
+	if err != nil {
+		return writeJSONError(stdout, *jsonFlag, err)
+	}
+
+	entry, err := decodeEntry(resolvedEntry)
 	if err != nil {
 		return writeJSONError(stdout, *jsonFlag, err)
 	}

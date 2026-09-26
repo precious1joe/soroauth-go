@@ -299,6 +299,18 @@ func VerifyEntryContext(ctx context.Context, entry xdr.SorobanAuthorizationEntry
 //
 // encoded is the XDR encoding of the node's address, which is how addresses
 // are compared throughout this library and how the node's type is recovered.
+// SignatureVerificationError represents an error during signature verification.
+type SignatureVerificationError struct {
+	Address string
+	Reason  string
+	Shape   SignatureShape
+}
+
+// Error returns the error message.
+func (e *SignatureVerificationError) Error() string {
+	return fmt.Sprintf("soroauth: verification failed for %s: %s (signature shape: %s - %s)", e.Address, e.Reason, e.Shape.Type, e.Shape.Description)
+}
+
 func verifyNode(signature xdr.ScVal, encoded []byte, payload [32]byte) (NodeVerdict, error) {
 	var address xdr.ScAddress
 	if err := address.UnmarshalBinary(encoded); err != nil {
