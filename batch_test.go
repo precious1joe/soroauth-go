@@ -210,6 +210,17 @@ func TestAuthorizeAllFillsDelegateTrees(t *testing.T) {
 // anywhere in the tree is enough, because requiring the account's own
 // signature would break the delegates-only pattern CAP-71-01 allows.
 
+func TestVerifyAllAndConcurrency(t *testing.T) {
+	entry := xdr.SorobanAuthorizationEntry{
+		Credentials: xdr.SorobanCredentials{
+			Type: xdr.SorobanCredentialsTypeSorobanCredentialsSourceAccount,
+		},
+	}
+	results, err := VerifyAll(context.Background(), []xdr.SorobanAuthorizationEntry{entry}, network.TestNetworkPassphrase, WithConcurrency(2))
+	assert.NoError(t, err)
+	assert.Len(t, results, 1)
+}
+
 func TestAuthorizeAllAcceptsDelegatesWithoutATopLevelSigner(t *testing.T) {
 	base := entryForArm(t, xdr.SorobanCredentialsTypeSorobanCredentialsAddressV2, 42)
 	delegate := testKeypair(t, "soroauth-delegate-1")
