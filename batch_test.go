@@ -661,6 +661,7 @@ func ExampleRequireAllSigned() {
 	// Output:
 	// rejected: true
 }
+
 func TestVerifyAllAndVerifyEntry(t *testing.T) {
 	signer := NewEd25519Signer(testKeypair(t, "soroauth-verify-batch"))
 
@@ -703,4 +704,31 @@ func TestVerifyAllAndVerifyEntry(t *testing.T) {
 	reportFromResults, err := VerifyEntry(signedSlice[0], network.TestNetworkPassphrase)
 	require.NoError(t, err)
 	assert.True(t, reportFromResults.Verified())
+}
+
+func TestVerifyAllWithOptionsAndErrors(t *testing.T) {
+	kp := testKeypair(t, "soroauth-verify-batch")
+	signer := NewEd25519Signer(kp)
+
+	entry := entryForArm(t, xdr.SorobanCredentialsTypeSorobanCredentialsAddressV2, 10)
+	address, err := ParseAddress(kp.Address())
+	require.NoError(t, err)
+	cred, err := addressCredentials(entry.Credentials)
+	require.NoError(t, err)
+	cred.Address = address
+
+	signedSlice, err := AuthorizeAll(context.Background(), []xdr.SorobanAuthorizationEntry{entry}, []Signer{signer}, 100, network.TestNetworkPassphrase)
+	require.NoError(t, err)
+
+	unsignedEntry := entryForArm(t, xdr.SorobanCredentialsTypeSorobanCredentialsAddressV2, 11)
+
+	entries := []xdr.SorobanAuthorizationEntry{signedSlice[0], unsignedEntry}
+
+	results, err := VerifyAll(context.Background(), entries, network.TestNetworkPassphrase, WithConcurrency(2))
+	require.NoError(t, err)
+	require.Len(t, results, 2)
+
+	assert.NoError(t, results[0].Error)
+
+	assert.Error(t, results[1].Error)
 }
