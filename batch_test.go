@@ -696,7 +696,8 @@ func TestVerifyAllAndVerifyEntry(t *testing.T) {
 }
 
 func BenchmarkVerifyEntry(b *testing.B) {
-	signer := NewEd25519Signer(testKeypair(&testing.T{}, "soroauth-bench-entry"))
+	key := testKeypair(b, "soroauth-bench-entry")
+	signer := NewEd25519Signer(key)
 
 	var contractID xdr.ContractId
 	inv := xdr.SorobanAuthorizedInvocation{
@@ -724,7 +725,8 @@ func BenchmarkVerifyEntry(b *testing.B) {
 }
 
 func BenchmarkVerifyAll(b *testing.B) {
-	signer := NewEd25519Signer(testKeypair(&testing.T{}, "soroauth-bench-all"))
+	key := testKeypair(b, "soroauth-bench-all")
+	signer := NewEd25519Signer(key)
 
 	var contractID xdr.ContractId
 	inv := xdr.SorobanAuthorizedInvocation{
