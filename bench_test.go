@@ -101,7 +101,7 @@ func BenchmarkVerifyEntry(b *testing.B) {
 		b.Fatalf("random keypair: %v", err)
 	}
 	signer := NewEd25519Signer(kp)
-	entry := entryForArm(b, xdr.SorobanCredentialsTypeSorobanCredentialsAddressV2, 1)
+	entry := entryForArm(nil, xdr.SorobanCredentialsTypeSorobanCredentialsAddressV2, 1)
 
 	address, err := ParseAddress(kp.Address())
 	if err != nil {
@@ -130,7 +130,7 @@ func BenchmarkVerifyAll(b *testing.B) {
 		b.Fatalf("random keypair: %v", err)
 	}
 	signer := NewEd25519Signer(kp)
-	entry := entryForArm(b, xdr.SorobanCredentialsTypeSorobanCredentialsAddressV2, 1)
+	entry := entryForArm(nil, xdr.SorobanCredentialsTypeSorobanCredentialsAddressV2, 1)
 
 	address, err := ParseAddress(kp.Address())
 	if err != nil {
