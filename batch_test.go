@@ -708,6 +708,8 @@ func ExampleRequireAllSigned() {
 }
 
 func TestVerifyAllAndVerifyEntry(t *testing.T) {
+	kp := testKeypair(t, "soroauth-verify-batch")
+	parsedAddr := mustParse(t, kp.Address())
 	signer := NewEd25519Signer(testKeypair(t, "soroauth-verify-batch"))
 
 	var contractID xdr.ContractId
@@ -726,16 +728,12 @@ func TestVerifyAllAndVerifyEntry(t *testing.T) {
 		},
 	}
 
-	signedSlice, err := AuthorizeAll(context.Background(), []xdr.SorobanAuthorizationEntry{{
-		Credentials: xdr.SorobanCredentials{
-			Type: xdr.SorobanCredentialsTypeSorobanCredentialsAddress,
-			Address: &xdr.SorobanAddressCredentials{
-				Address: mustParse(t, testKeypair(t, "soroauth-verify-batch").Address()),
-				Nonce:   1,
-			},
-		},
-		RootInvocation: inv,
-	}}, []Signer{signer}, 100, network.TestNetworkPassphrase)
+	base := entryForArm(t, xdr.SorobanCredentialsTypeSorobanCredentialsAddress, 1)
+	cred, err := addressCredentials(base.Credentials)
+	require.NoError(t, err)
+	cred.Address = parsedAddr
+
+	signedSlice, err := AuthorizeAll(context.Background(), []xdr.SorobanAuthorizationEntry{base}, []Signer{signer}, 100, network.TestNetworkPassphrase)
 	require.NoError(t, err)
 
 	report, err := VerifyEntry(signedSlice[0], network.TestNetworkPassphrase)
