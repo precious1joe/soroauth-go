@@ -113,10 +113,11 @@ func BenchmarkVerifyEntry(b *testing.B) {
 	}
 	cred.Address = address
 
-	signed, err := AuthorizeEntry(context.Background(), entry, signer, 100, network.TestNetworkPassphrase)
+	signedSlice, err := AuthorizeAll(context.Background(), []xdr.SorobanAuthorizationEntry{entry}, []Signer{signer}, 100, network.TestNetworkPassphrase)
 	if err != nil {
 		b.Fatalf("authorize: %v", err)
 	}
+	signed := signedSlice[0]
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -142,12 +143,12 @@ func BenchmarkVerifyAll(b *testing.B) {
 	}
 	cred.Address = address
 
-	signed, err := AuthorizeEntry(context.Background(), entry, signer, 100, network.TestNetworkPassphrase)
+	signedSlice, err := AuthorizeAll(context.Background(), []xdr.SorobanAuthorizationEntry{entry}, []Signer{signer}, 100, network.TestNetworkPassphrase)
 	if err != nil {
 		b.Fatalf("authorize: %v", err)
 	}
 
-	entries := []xdr.SorobanAuthorizationEntry{signed, signed}
+	entries := []xdr.SorobanAuthorizationEntry{signedSlice[0], signedSlice[0]}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
