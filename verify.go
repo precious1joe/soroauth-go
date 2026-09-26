@@ -1,6 +1,7 @@
 package soroauth
 
 import (
+	"context"
 	"crypto/ed25519"
 	"fmt"
 
@@ -223,7 +224,11 @@ const shapeNote = "the signature is not the built-in {public_key, signature} acc
 // ErrUnsupportedCredentials rather than reported on.
 //
 // VerifyEntry does not modify entry.
-func VerifyEntry(entry xdr.SorobanAuthorizationEntry, networkPassphrase string) (VerificationReport, error) {
+func VerifyEntry(ctx context.Context, entry xdr.SorobanAuthorizationEntry, networkPassphrase string) (VerificationReport, error) {
+	if err := ctx.Err(); err != nil {
+		return VerificationReport{}, fmt.Errorf("soroauth: verify entry: %w", err)
+	}
+
 	if networkPassphrase == "" {
 		return VerificationReport{}, fmt.Errorf("soroauth: verify entry: network passphrase is empty")
 	}
@@ -257,11 +262,11 @@ func VerifyEntry(entry xdr.SorobanAuthorizationEntry, networkPassphrase string) 
 	expiration := uint32(credentials.SignatureExpirationLedger)
 	preimage, err := Preimage(entry, expiration, networkPassphrase)
 	if err != nil {
-		return VerificationReport{}, fmt.Errorf("soroauth: verify entry: %w", err)
+		return VerificationReport{}, fmt.Errorf("soroauth: verify entry for %s: %w", address, err)
 	}
 	payload, err := Payload(preimage)
 	if err != nil {
-		return VerificationReport{}, fmt.Errorf("soroauth: verify entry: %w", err)
+		return VerificationReport{}, fmt.Errorf("soroauth: verify entry for %s: %w", address, err)
 	}
 
 	nodes, err := credentialNodes(&entry)
