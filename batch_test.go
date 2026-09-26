@@ -1,17 +1,19 @@
 package soroauth
 
 import (
-	"bytes"
 	"context"
+	"testing"
+
+	"bytes"
 	"crypto/sha256"
 	"errors"
 	"fmt"
-	"strings"
-	"testing"
-
 	"github.com/stellar/go-stellar-sdk/keypair"
 	"github.com/stellar/go-stellar-sdk/network"
 	"github.com/stellar/go-stellar-sdk/xdr"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"strings"
 )
 
 // entryForSigner builds an address entry owned by the given test label.
@@ -657,4 +659,47 @@ func ExampleRequireAllSigned() {
 	fmt.Println("rejected:", errors.Is(err, ErrUnsignedCredentialNode))
 	// Output:
 	// rejected: true
+}
+func TestVerifyAllAndVerifyEntry(t *testing.T) {
+	signer := NewEd25519Signer(testKeypair(t, "soroauth-verify-batch"))
+
+	var contractID xdr.ContractId
+	contractID[0] = 9
+
+	inv := xdr.SorobanAuthorizedInvocation{
+		Function: xdr.SorobanAuthorizedFunction{
+			Type: xdr.SorobanAuthorizedFunctionTypeSorobanAuthorizedFunctionTypeContractFn,
+			ContractFn: &xdr.InvokeContractArgs{
+				ContractAddress: xdr.ScAddress{
+					Type:       xdr.ScAddressTypeScAddressTypeContract,
+					ContractId: &contractID,
+				},
+				FunctionName: xdr.ScSymbol("hello"),
+			},
+		},
+	}
+
+	entry, err := AuthorizeAll(context.Background(), []xdr.SorobanAuthorizationEntry{{
+		Credentials: xdr.SorobanCredentials{
+			Type: xdr.SorobanCredentialsTypeSorobanCredentialsAddress,
+			Address: &xdr.SorobanAddressCredentials{
+				Address: mustParse(t, testKeypair(t, "soroauth-verify-batch").Address()),
+				Nonce:   1,
+			},
+		},
+		RootInvocation: inv,
+	}}, []Signer{signer}, 100, network.TestNetworkPassphrase)
+	require.NoError(t, err)
+
+	report, err := VerifyEntry(entry, network.TestNetworkPassphrase)
+	require.NoError(t, err)
+	assert.True(t, report.Verified())
+
+	results, err := VerifyAll(context.Background(), []xdr.SorobanAuthorizationEntry{entry}, network.TestNetworkPassphrase, WithConcurrency(2))
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+	assert.NoError(t, results[0].Error)
+	reportFromResults, err := VerifyEntry(entry, network.TestNetworkPassphrase)
+	require.NoError(t, err)
+	assert.True(t, reportFromResults.Verified())
 }
