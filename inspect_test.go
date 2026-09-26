@@ -389,3 +389,39 @@ func mustParse(t *testing.T, address string) xdr.ScAddress {
 	}
 	return parsed
 }
+
+func FuzzInspect(f *testing.F) {
+	// Seed with vectors from testdata/vectors
+	for _, vec := range loadVectors(&testing.T{}) {
+		var entry xdr.SorobanAuthorizationEntry
+		if err := xdr.SafeUnmarshalBase64(vec.UnsignedEntryXDR, &entry); err == nil {
+			raw, err := entry.MarshalBinary()
+			if err == nil {
+				f.Add(raw)
+			}
+		}
+	}
+
+	// Seed with empty union arm cases (add dummy initialized values or skip if nil-pointer causes marshal panic)
+	emptyArm := entryForArm(&testing.T{}, xdr.SorobanCredentialsTypeSorobanCredentialsAddressV2, 42)
+	emptyArm.Credentials.AddressV2 = nil
+	// Avoid MarshalBinary panic on uninitialized pointer in stellar XDR generated code
+	_ = emptyArm
+
+	emptyFn := entryForArm(&testing.T{}, xdr.SorobanCredentialsTypeSorobanCredentialsAddressV2, 42)
+	emptyFn.RootInvocation.Function.ContractFn = nil
+	_ = emptyFn
+
+	f.Fuzz(func(t *testing.T, data []byte) {
+		var entry xdr.SorobanAuthorizationEntry
+		if err := entry.UnmarshalBinary(data); err != nil {
+			return
+		}
+		info, err := Inspect(entry)
+		if err != nil {
+			if !reflect.DeepEqual(info, EntryInfo{}) {
+				t.Errorf("Inspect returned a non-empty EntryInfo alongside an error: %+v, err: %v", info, err)
+			}
+		}
+	})
+}
