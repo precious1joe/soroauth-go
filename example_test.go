@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/stellar/go-stellar-sdk/keypair"
+	"github.com/stellar/go-stellar-sdk/network"
 	"github.com/stellar/go-stellar-sdk/xdr"
 )
 
@@ -97,6 +98,45 @@ func ExampleNewPasskeySigner() {
 	fmt.Printf("signer address: %s\n", signer.Address())
 
 	// Output: signer address: GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF
+}
+
+// ExampleVerifyAll shows how to verify a batch of authorization entries
+// concurrently with custom configuration and per-entry reporting.
+func ExampleVerifyAll() {
+	entry := xdr.SorobanAuthorizationEntry{
+		Credentials: xdr.SorobanCredentials{
+			Type: xdr.SorobanCredentialsTypeSorobanCredentialsSourceAccount,
+		},
+	}
+
+	results, err := VerifyAll(context.Background(), []xdr.SorobanAuthorizationEntry{entry}, network.TestNetworkPassphrase, WithConcurrency(2))
+	if err != nil {
+		fmt.Println("verify error:", err)
+		return
+	}
+
+	for _, res := range results {
+		fmt.Printf("entry %d address=%q err=%v\n", res.Index, res.Address, res.Error)
+		break
+	}
+
+	// Output: entry 0 address="" err=<nil>
+}
+
+// ExampleDescribeSignature shows how to use DescribeSignature to inspect
+// an unknown or custom signature shape.
+func ExampleDescribeSignature() {
+	// A sample passkey signature shape (64 bytes)
+	bytesVal := make([]byte, 64)
+	sig := xdr.ScVal{
+		Type:  xdr.ScValTypeScvBytes,
+		Bytes: (*xdr.ScBytes)(&bytesVal),
+	}
+
+	shape := DescribeSignature(sig)
+	fmt.Printf("shape type: %s, description: %s\n", shape.Type, shape.Description)
+
+	// Output: shape type: passkey, description: 64-byte binary passkey signature
 }
 
 // ExampleSigner_cancellation shows how signers honour context cancellation

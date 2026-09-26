@@ -1,11 +1,31 @@
 # Changelog
 
-All notable changes to this project are documented here.
+All notable changes to this project are documented here:
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+- `DescribeSignature` and `SignatureShape` report structural descriptions of uncheckable custom account signatures best-effort without upgrading them into verification verdicts. (#63)
+
+- `VerifyAll` batch verification API with configurable concurrency (`WithConcurrency`), reporting per-entry verdicts without aborting the entire batch on individual entry failures. (#62)
+
+- `payload`, `sign` and `delegates` accept `--entry -`, reading the entry from
+  standard input, so the subcommands compose in a pipeline:
+
+  ```sh
+  soroauth delegates --entry entry.b64 --valid-until 1234567 --delegate GABC... | \
+    soroauth sign --entry - --valid-until 1234567 --network testnet --secret-env SEED --for GABC...
+  ```
+
+  The value read is trimmed of surrounding whitespace, because every
+  subcommand prints its base64 with a trailing newline and the XDR decoder
+  refuses a blob carrying one. (#84)
+
+- Every golden vector carries a `schema_version`, written by the generator, and
+  `golden_test.go` refuses a vector whose version it does not know rather than
+  reading fields that may have moved. (#50)
 
 ### Added
 
@@ -172,6 +192,12 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   structured output, and never prints a secret's value — only whether it is
   set. Exit code reflects overall status (0 all passed, 1 something failed).
 
+**Batch verification API (`VerifyAll`)**
+
+- New `VerifyAll` function verifying a slice of Soroban authorization entries in one call, reporting per-entry verdicts. A failure in one entry does not abort the rest. Concurrency is bounded and configurable via `WithConcurrency`. Includes Go doc examples and benchmarks ensuring no regression on the signing/verification path.
+
+  **Migration:** none required.
+
 **Scoped `AllowResign`**
 
 - `AllowResign` now accepts optional addresses:
@@ -204,8 +230,7 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   if errors.Is(err, soroauth.ErrMissingSigner) && errors.As(err, &addrErr) {
       log.Printf("no signer for %s", addrErr.Address)
   }
-  ```
-
+  
   **Migration:** none required. Error messages are byte-identical to v0.1.0,
   and every existing `errors.Is(err, Err…)` check continues to work. Callers
   that previously extracted an address by substring-matching the message may

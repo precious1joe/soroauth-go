@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"os"
 
 	"github.com/stellar/go-stellar-sdk/keypair"
 	"github.com/stellar/go-stellar-sdk/xdr"
@@ -17,8 +18,13 @@ import (
 const signUsage = `soroauth sign — sign an authorization entry.
 
 usage:
-  soroauth sign --entry <base64> --valid-until <ledger> --network <name|passphrase> \
+  soroauth sign --entry <base64|-> --valid-until <ledger> --network <name|passphrase> \
                 --secret-env <VAR> [--for <address>] [--json]
+
+Subcommands support reading entries from stdin using --entry - so commands compose in pipelines:
+
+  soroauth delegates --entry entry.b64 --valid-until 1234567 --delegate GABC... | \
+    soroauth sign --entry - --valid-until 1234567 --network testnet --secret-env SEED --for GABC...
 
 --entry accepts either an authorization entry or a whole transaction envelope,
 and the tool works out which it was given. Given an envelope it signs every
@@ -56,6 +62,10 @@ type signOutput struct {
 }
 
 func runSign(args []string, stdout, stderr io.Writer, getenv func(string) string) error {
+	return runSignWithStdin(args, stdout, stderr, getenv, os.Stdin)
+}
+
+func runSignWithStdin(args []string, stdout, stderr io.Writer, getenv func(string) string, stdin io.Reader) error {
 	flags := flag.NewFlagSet("sign", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	flags.Usage = func() {
@@ -64,10 +74,10 @@ func runSign(args []string, stdout, stderr io.Writer, getenv func(string) string
 		flags.PrintDefaults()
 	}
 
-	entryFlag := flags.String("entry", "", "the authorization entry or transaction envelope, as base64 XDR")
+	entryFlag := flags.String("entry", "", "the authorization entry or transaction envelope, as base64 XDR or -")
 	validUntil := flags.Uint("valid-until", 0, "the last ledger at which the signature is valid")
 	networkFlag := flags.String("network", "", "testnet, public, or a literal network passphrase")
-	secretEnv := flags.String("secret-env", "", "name of the environment variable holding the S… seed")
+	secretEnv := flags.String("secret-env", "", "name of the environment variable holding the signing seed (S…)")
 	forAddress := flags.String("for", "", "credential node to sign, when it is not the signer's own address")
 	jsonFlag := flags.Bool("json", false, "output as JSON")
 
@@ -75,7 +85,12 @@ func runSign(args []string, stdout, stderr io.Writer, getenv func(string) string
 		return newErrorf(ExitUsageError, "%w", err)
 	}
 
-	input, err := decodeEntryOrEnvelope(*entryFlag)
+	resolvedEntry, err := resolveEntryArg(*entryFlag, stdin)
+	if err != nil {
+		return writeJSONError(stdout, *jsonFlag, err)
+	}
+
+	input, err := decodeEntryOrEnvelope(resolvedEntry)
 	if err != nil {
 		return writeJSONError(stdout, *jsonFlag, err)
 	}

@@ -114,6 +114,18 @@ func main() {
 // environment, and a test must be able to supply one without mutating the real
 // environment of the test binary.
 func run(args []string, stdout, stderr io.Writer, getenv func(string) string) error {
+	return runWithStdin(args, stdout, stderr, getenv, os.Stdin)
+}
+
+// runWithStdin is run with the standard input it reads `--entry -` from
+// injected, so a test can pipe one subcommand's output into the next without
+// replacing the process's real os.Stdin. Replacing it is not safe here: the
+// test binary runs cases in parallel and os.Stdin is shared, so a swap made by
+// one case is visible to every other one.
+//
+// Only payload, sign and delegates accept `--entry -`; the remaining
+// subcommands are dispatched exactly as run would dispatch them.
+func runWithStdin(args []string, stdout, stderr io.Writer, getenv func(string) string, stdin io.Reader) error {
 	if len(args) == 0 {
 		fmt.Fprint(stderr, usage)
 		return newErrorf(ExitUsageError, "no command given")
@@ -121,11 +133,11 @@ func run(args []string, stdout, stderr io.Writer, getenv func(string) string) er
 
 	switch args[0] {
 	case "payload":
-		return runPayload(args[1:], stdout, stderr)
+		return runPayloadWithStdin(args[1:], stdout, stderr, stdin)
 	case "sign":
-		return runSign(args[1:], stdout, stderr, getenv)
+		return runSignWithStdin(args[1:], stdout, stderr, getenv, stdin)
 	case "delegates":
-		return runDelegates(args[1:], stdout, stderr)
+		return runDelegatesWithStdin(args[1:], stdout, stderr, stdin)
 	case "inspect":
 		return runInspect(args[1:], stdout, stderr)
 	case "verify":
@@ -166,6 +178,23 @@ func resolveNetwork(value string) (string, error) {
 	}
 }
 
+// readEntryFlag reads the entry value from stdin if value is "-", otherwise
+// returns value.
+//
+// This is the path for the subcommands that do not inject their own reader —
+// inspect, verify and tree. It delegates to resolveEntryArg rather than reading
+// os.Stdin itself so that there is one definition of what `--entry -` means,
+// including the whitespace trimming a pipeline depends on; the two used to
+// diverge, and `soroauth delegates … | soroauth inspect --entry -` failed with
+// "input not fully consumed" on the trailing newline.
+func readEntryFlag(value string) (string, error) {
+	resolved, err := resolveEntryArg(value, os.Stdin)
+	if err != nil {
+		return "", fmt.Errorf("reading from stdin: %w", err)
+	}
+	return resolved, nil
+}
+
 // decodeEntry parses a base64 authorization entry from a flag value.
 //
 // The entry comes from the command line, which means it came from somewhere
@@ -179,7 +208,11 @@ func decodeEntry(value string) (xdr.SorobanAuthorizationEntry, error) {
 	if value == "" {
 		return xdr.SorobanAuthorizationEntry{}, newErrorf(ExitUsageError, "--entry is required")
 	}
-	entry, err := soroauth.DecodeAuthorizationEntry(value)
+	val, err := readEntryFlag(value)
+	if err != nil {
+		return xdr.SorobanAuthorizationEntry{}, newErrorf(ExitUsageError, "%w", err)
+	}
+	entry, err := soroauth.DecodeAuthorizationEntry(val)
 	if err != nil {
 		return xdr.SorobanAuthorizationEntry{}, newErrorf(ExitUsageError, "decoding --entry: %w", err)
 	}
@@ -209,12 +242,16 @@ func decodeEntryOrEnvelope(value string) (decodedInput, error) {
 	if value == "" {
 		return decodedInput{}, newErrorf(ExitUsageError, "--entry is required")
 	}
+	val, err := readEntryFlag(value)
+	if err != nil {
+		return decodedInput{}, newErrorf(ExitUsageError, "%w", err)
+	}
 
 	var envelope xdr.TransactionEnvelope
-	envelopeErr := xdr.SafeUnmarshalBase64(value, &envelope)
+	envelopeErr := xdr.SafeUnmarshalBase64(val, &envelope)
 
 	var entry xdr.SorobanAuthorizationEntry
-	entryErr := xdr.SafeUnmarshalBase64(value, &entry)
+	entryErr := xdr.SafeUnmarshalBase64(val, &entry)
 
 	// An envelope only wins when it decodes and carries an invokeHostFunction
 	// operation. A blob that decodes as an envelope but has nothing to
