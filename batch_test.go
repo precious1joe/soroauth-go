@@ -217,8 +217,30 @@ func TestVerifyAllAndConcurrency(t *testing.T) {
 		},
 	}
 	results, err := VerifyAll(context.Background(), []xdr.SorobanAuthorizationEntry{entry}, network.TestNetworkPassphrase, WithConcurrency(2))
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Len(t, results, 1)
+	assert.Equal(t, 0, results[0].Index)
+}
+
+func TestVerifyAllWithOptionsAndEntries(t *testing.T) {
+	first := "soroauth-batch-verify-1"
+	kp := testKeypair(t, first)
+	signer := NewEd25519Signer(kp)
+	base := entryForArm(t, xdr.SorobanCredentialsTypeSorobanCredentialsAddressV2, 10)
+
+	address, err := ParseAddress(kp.Address())
+	require.NoError(t, err)
+	cred, err := addressCredentials(base.Credentials)
+	require.NoError(t, err)
+	cred.Address = address
+
+	signedSlice, err := AuthorizeAll(context.Background(), []xdr.SorobanAuthorizationEntry{base}, []Signer{signer}, testValidUntilLedger, network.TestNetworkPassphrase)
+	require.NoError(t, err)
+
+	results, err := VerifyAll(context.Background(), signedSlice, network.TestNetworkPassphrase, WithConcurrency(4))
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+	assert.NoError(t, results[0].Error)
 }
 
 func TestAuthorizeAllAcceptsDelegatesWithoutATopLevelSigner(t *testing.T) {
