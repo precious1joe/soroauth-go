@@ -372,7 +372,6 @@ func VerifyAll(
 	close(jobs)
 
 	results := make([]VerifyResult, len(entries))
-	var mu sync.Mutex
 	var wg sync.WaitGroup
 	for w := 0; w < workerLimit; w++ {
 		wg.Add(1)
@@ -382,18 +381,14 @@ func VerifyAll(
 				res := VerifyResult{Index: j.index}
 				local := j.entry
 				if local.Credentials.Type == xdr.SorobanCredentialsTypeSorobanCredentialsSourceAccount {
-					mu.Lock()
 					results[j.index] = res
-					mu.Unlock()
 					continue
 				}
 
 				credentials, err := addressCredentials(local.Credentials)
 				if err != nil {
 					res.Error = err
-					mu.Lock()
 					results[j.index] = res
-					mu.Unlock()
 					continue
 				}
 				addrStr, err := FormatAddress(credentials.Address)
@@ -403,9 +398,7 @@ func VerifyAll(
 
 				_, err = VerifyEntry(local, networkPassphrase)
 				res.Error = err
-				mu.Lock()
 				results[j.index] = res
-				mu.Unlock()
 			}
 		}()
 	}
