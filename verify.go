@@ -231,9 +231,8 @@ func VerifyEntry(entry xdr.SorobanAuthorizationEntry, networkPassphrase string) 
 
 // VerifyEntryContext checks an authorization entry's signatures with a given context.
 func VerifyEntryContext(ctx context.Context, entry xdr.SorobanAuthorizationEntry, networkPassphrase string) (VerificationReport, error) {
-
-	if networkPassphrase == "" {
-		return VerificationReport{}, fmt.Errorf("soroauth: verify entry: network passphrase is empty")
+	if err := ctx.Err(); err != nil {
+		return VerificationReport{}, fmt.Errorf("soroauth: verify entry: %w", err)
 	}
 
 	switch entry.Credentials.Type {
