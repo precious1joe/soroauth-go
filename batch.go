@@ -403,7 +403,15 @@ func VerifyAll(
 					res.Address = addrStr
 				}
 
-				_, err = VerifyEntry(local, networkPassphrase)
+				rep, err := VerifyEntry(local, networkPassphrase)
+				if err == nil && !rep.Verified() {
+					for _, n := range rep.Nodes {
+						if n.Verdict != VerdictVerified && n.Verdict != VerdictUnsigned {
+							err = fmt.Errorf("node %s verdict %s: %s", n.Address, n.Verdict, n.Reason)
+							break
+						}
+					}
+				}
 				res.Error = err
 				mu.Lock()
 				results[j.index] = res
