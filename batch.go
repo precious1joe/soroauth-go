@@ -372,10 +372,8 @@ func VerifyAll(
 	close(jobs)
 
 	results := make([]VerifyResult, len(entries))
-	var (
-		mu sync.Mutex
-		wg sync.WaitGroup
-	)
+	var wg sync.WaitGroup
+	var mu sync.Mutex
 	for w := 0; w < workerLimit; w++ {
 		wg.Add(1)
 		go func() {
