@@ -225,7 +225,9 @@ const shapeNote = "the signature is not the built-in {public_key, signature} acc
 //
 // VerifyEntry does not modify entry.
 func VerifyEntry(entry xdr.SorobanAuthorizationEntry, networkPassphrase string) (VerificationReport, error) {
-	return VerifyEntryContext(context.Background(), entry, networkPassphrase)
+	ctx := context.Background()
+	report, err := VerifyEntryContext(ctx, entry, networkPassphrase)
+	return report, err
 }
 
 // VerifyEntryContext checks an authorization entry's signatures with a given context.
