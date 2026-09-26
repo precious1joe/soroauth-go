@@ -692,11 +692,9 @@ func TestVerifyAllAndVerifyEntry(t *testing.T) {
 	cred, err := addressCredentials(base.Credentials)
 	require.NoError(t, err)
 	cred.Address = parsedAddr
-	cred, err := addressCredentials(base.Credentials)
-	require.NoError(t, err)
-	cred.Address = parsedAddr
 
 	signedSlice, err := AuthorizeAll(context.Background(), []xdr.SorobanAuthorizationEntry{base}, []Signer{signer}, 100, network.TestNetworkPassphrase)
+	require.NoError(t, err)
 	require.NoError(t, err)
 
 	report, err := VerifyEntry(signedSlice[0], network.TestNetworkPassphrase)
